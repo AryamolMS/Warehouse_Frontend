@@ -18,48 +18,65 @@ function Login() {
   const navigate = useNavigate();
 
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setToast('');
-
-    if (!email || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/login/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || 'Login failed');
-      } else {
-        setToast('Login successful!');
-        window.supplierData = data.supplier;
-setToast('Login successful!');
-
-// Clear toast and navigate after 1.5s
-setTimeout(() => {
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
   setToast('');
-  navigate('/supplierhome');
-}, 1500);
 
-      }
-    } catch (err) {
-      setError('Network error. Please try again.');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+  if (!email || !password) {
+    setError('Please fill in all fields');
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    // Admin credentials for frontend testing
+    const adminEmail = "admin@gmail.com";
+    const adminPassword = "admin1234";
+
+    // Check if admin is logging in
+    if (email === adminEmail && password === adminPassword) {
+      setToast('Admin login successful!');
+
+      // Clear toast and navigate after 1.5s
+      setTimeout(() => {
+        setToast('');
+        navigate('/adminhome');
+      }, 1500);
+
+      return; // Skip backend API call for admin
     }
-  };
+
+    // Normal user login (supplier/student)
+    const response = await fetch('http://127.0.0.1:8000/api/login/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setError(data.error || 'Login failed');
+    } else {
+      setToast('Login successful!');
+      window.supplierData = data.supplier;
+
+      // Clear toast and navigate after 1.5s
+      setTimeout(() => {
+        setToast('');
+        navigate('/supplierhome');
+      }, 1500);
+    }
+  } catch (err) {
+    setError('Network error. Please try again.');
+    console.error(err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div style={styles.page}>
