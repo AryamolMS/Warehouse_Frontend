@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Package, TrendingUp, AlertCircle, Users, Truck, BarChart3, Box, ClipboardList } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 function Home() {
   const [stats] = useState({
@@ -15,6 +16,35 @@ function Home() {
     { id: 3, type: 'alert', item: 'Low Stock Alert: Item SKU-2341', time: '1 hour ago' },
     { id: 4, type: 'inbound', item: 'Raw Materials - Batch #9012', time: '2 hours ago' }
   ]);
+
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+
+
+  // Form state for new stock
+  const [newStock, setNewStock] = useState({
+    itemName: '',
+    sku: '',
+    quantity: '',
+    category: '',
+    supplier: '',
+    arrivalDate: ''
+  });
+
+  const openModal = () => setShowModal(true);
+  const closeModal = () => setShowModal(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setNewStock((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    // You can handle the form data here (e.g., send to backend)
+    console.log('New Stock:', newStock);
+    closeModal();
+  };
 
   const styles = {
     root: {
@@ -214,6 +244,82 @@ function Home() {
 
   return (
     <div style={styles.root}>
+      {/* Modal */}
+      {showModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(30, 41, 59, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: '20px',
+            padding: '40px 32px 32px 32px',
+            minWidth: '380px',
+            boxShadow: '0 12px 40px rgba(102,126,234,0.25)',
+            position: 'relative',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.12)'
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: '-32px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'linear-gradient(135deg, #fff 0%, #e0e7ff 100%)',
+              borderRadius: '50%',
+              boxShadow: '0 4px 16px rgba(102,126,234,0.18)',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '64px',
+              height: '64px'
+            }}>
+              <Package size={32} color="#667eea" />
+            </div>
+            <h2 style={{marginBottom: '18px', color: '#fff', textAlign: 'center', fontWeight: 700, fontSize: '1.6rem', letterSpacing: '0.5px'}}>Add New Stock Item</h2>
+            <form onSubmit={handleSubmit}>
+              <div style={{marginBottom: '14px'}}>
+                <label style={{display: 'block', marginBottom: '6px', color: '#e0e7ff', fontWeight: 500, fontSize: '15px'}}>Item Name</label>
+                <input type="text" name="itemName" value={newStock.itemName} onChange={handleChange} required style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#222', fontWeight: 500, fontSize: '15px', outline: 'none', boxShadow: '0 2px 8px rgba(102,126,234,0.08)'}} />
+              </div>
+              <div style={{marginBottom: '14px'}}>
+                <label style={{display: 'block', marginBottom: '6px', color: '#e0e7ff', fontWeight: 500, fontSize: '15px'}}>SKU</label>
+                <input type="text" name="sku" value={newStock.sku} onChange={handleChange} required style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#222', fontWeight: 500, fontSize: '15px', outline: 'none', boxShadow: '0 2px 8px rgba(102,126,234,0.08)'}} />
+              </div>
+              <div style={{marginBottom: '14px'}}>
+                <label style={{display: 'block', marginBottom: '6px', color: '#e0e7ff', fontWeight: 500, fontSize: '15px'}}>Quantity</label>
+                <input type="number" name="quantity" value={newStock.quantity} onChange={handleChange} required min="1" style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#222', fontWeight: 500, fontSize: '15px', outline: 'none', boxShadow: '0 2px 8px rgba(102,126,234,0.08)'}} />
+              </div>
+              <div style={{marginBottom: '14px'}}>
+                <label style={{display: 'block', marginBottom: '6px', color: '#e0e7ff', fontWeight: 500, fontSize: '15px'}}>Category</label>
+                <input type="text" name="category" value={newStock.category} onChange={handleChange} required style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#222', fontWeight: 500, fontSize: '15px', outline: 'none', boxShadow: '0 2px 8px rgba(102,126,234,0.08)'}} />
+              </div>
+              <div style={{marginBottom: '14px'}}>
+                <label style={{display: 'block', marginBottom: '6px', color: '#e0e7ff', fontWeight: 500, fontSize: '15px'}}>Supplier</label>
+                <input type="text" name="supplier" value={newStock.supplier} onChange={handleChange} required style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#222', fontWeight: 500, fontSize: '15px', outline: 'none', boxShadow: '0 2px 8px rgba(102,126,234,0.08)'}} />
+              </div>
+              <div style={{marginBottom: '24px'}}>
+                <label style={{display: 'block', marginBottom: '6px', color: '#e0e7ff', fontWeight: 500, fontSize: '15px'}}>Arrival Date</label>
+                <input type="date" name="arrivalDate" value={newStock.arrivalDate} onChange={handleChange} required style={{width: '100%', padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#222', fontWeight: 500, fontSize: '15px', outline: 'none', boxShadow: '0 2px 8px rgba(102,126,234,0.08)'}} />
+              </div>
+              <div style={{display: 'flex', justifyContent: 'flex-end', gap: '14px'}}>
+                <button type="button" onClick={closeModal} style={{padding: '10px 20px', background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', color: '#667eea', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px rgba(102,126,234,0.10)'}}>Cancel</button>
+                <button type="submit" style={{padding: '10px 20px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px rgba(102,126,234,0.10)'}}>Add Item</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header style={styles.header}>
         <div style={styles.headerContent}>
@@ -402,6 +508,7 @@ function Home() {
                   e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
                   e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.1)';
                 }}
+                onClick={openModal}
               >
                 <Package size={20} color="#667eea" />
                 <span>Add New Item</span>
@@ -420,6 +527,7 @@ function Home() {
                 <Truck size={20} color="#a855f7" />
                 <span>Process Order</span>
               </button>
+              <Link to="/warehousereports">
               <button 
                 style={styles.quickActionButton}
                 onMouseEnter={(e) => {
@@ -434,6 +542,7 @@ function Home() {
                 <BarChart3 size={20} color="#10b981" />
                 <span>View Reports</span>
               </button>
+              </Link>
               <button 
                 style={styles.quickActionButton}
                 onMouseEnter={(e) => {
