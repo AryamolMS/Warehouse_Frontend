@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { Truck, ClipboardList, PhoneCall, Package, Sparkles } from 'lucide-react';
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 
 function Home_Supplier() {
   const [showPickupModal, setShowPickupModal] = useState(false);
@@ -56,17 +59,51 @@ function Home_Supplier() {
     setDeliveryForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleDeliverySubmit = () => {
-    if (deliveryForm.item && deliveryForm.quantity && deliveryForm.deliveryDate) {
-      const newDelivery = {
-        id: Date.now(),
-        ...deliveryForm
-      };
-      setDeliveries(prev => [...prev, newDelivery]);
+ const handleDeliverySubmit = async () => {
+  const { item, quantity, deliveryDate, notes } = deliveryForm;
+
+  if (!item || !quantity || !deliveryDate) {
+    toast.warn("Please fill all required fields!", { position: "top-center" });
+    return;
+  }
+
+  try {
+    const supplier = JSON.parse(localStorage.getItem("supplier"));
+
+    const payload = {
+      item,
+      quantity: Number(quantity),
+      deliveryDate,
+      notes,
+      supplierId: supplier.id, // ✅ match backend key
+    };
+
+    const response = await fetch("http://127.0.0.1:8000/api/add_delivery/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    console.log(data);
+
+    if (response.ok) {
+      toast.success("Delivery added successfully!", { position: "top-right" });
+      setDeliveries((prev) => [...prev, payload]);
       setDeliveryForm({ item: "", quantity: "", deliveryDate: "", notes: "" });
       setShowDeliveryModal(false);
+    } else {
+      toast.error(`Error: ${data.error}`, { position: "top-right" });
     }
-  };
+  } catch (err) {
+    toast.error("Error: " + err.message, { position: "top-right" });
+  }
+};
+
+
+
+
+
 
   return (
     <div style={{
@@ -611,6 +648,18 @@ function Home_Supplier() {
           transform: translateY(0px);
         }
       `}</style>
+      <ToastContainer
+  position="top-right"
+  autoClose={3000}
+  hideProgressBar={false}
+  newestOnTop={false}
+  closeOnClick
+  pauseOnFocusLoss
+  draggable
+  pauseOnHover
+  theme="dark"
+/>
+
     </div>
   );
 }
