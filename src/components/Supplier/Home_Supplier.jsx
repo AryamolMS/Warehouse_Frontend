@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState ,useEffect} from 'react';
 import { Truck, ClipboardList, PhoneCall, Package, Sparkles } from 'lucide-react';
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -101,8 +101,58 @@ function Home_Supplier() {
 };
 
 
+useEffect(() => {
+    const fetchDeliveries = async () => {
+      try {
+        const supplier = JSON.parse(localStorage.getItem("supplier"));
+        if (!supplier || !supplier.id) {
+          console.log("No supplier found in localStorage");
+          return;
+        }
 
+        console.log("Fetching deliveries for supplier ID:", supplier.id);
+        const response = await fetch(`http://127.0.0.1:8000/api/get_deliveries/${supplier.id}/`);
+        const data = await response.json();
 
+        console.log("Deliveries response:", data);
+
+        if (response.ok) {
+          // Handle both possible response structures
+          const deliveriesData = data.deliveries || data || [];
+          setDeliveries(deliveriesData);
+        } else {
+          toast.error(`Failed to load deliveries: ${data.error || 'Unknown error'}`, { position: "top-right" });
+        }
+      } catch (err) {
+        console.error("Error fetching deliveries:", err);
+        toast.error("Error fetching deliveries: " + err.message, { position: "top-right" });
+      }
+    };
+
+    fetchDeliveries();
+  }, []);
+
+useEffect(() => {
+  const fetchPickups = async () => {
+    try {
+      const supplier = JSON.parse(localStorage.getItem("supplier"));
+      if (!supplier?.id) return;
+
+      const res = await fetch(`http://127.0.0.1:8000/api/get_pickups/${supplier.id}/`);
+      const data = await res.json();
+
+      if (res.ok && Array.isArray(data.pickups)) {
+        setPickupRequests(data.pickups);
+      } else {
+        setPickupRequests([]);
+      }
+    } catch (err) {
+      toast.error("Error fetching pickups: " + err.message, { position: "top-right" });
+    }
+  };
+
+  fetchPickups();
+}, []);
 
 
   return (
