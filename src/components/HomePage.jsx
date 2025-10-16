@@ -36,10 +36,10 @@ export default function HomePage() {
             Connect suppliers and manage your business efficiently with our platform
           </p>
           <div style={styles.heroButtons}>
-            <button onClick={() => navigate('/registration')} style={styles.primaryButton}>
+            <button style={styles.primaryButton}>
               Get Started
             </button>
-            <button onClick={() => navigate('/login')} style={styles.secondaryButton}>
+            <button style={styles.secondaryButton}>
               Learn More
             </button>
           </div>

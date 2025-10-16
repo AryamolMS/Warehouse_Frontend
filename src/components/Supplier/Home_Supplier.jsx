@@ -1,24 +1,22 @@
-import React, { useState ,useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import { Truck, ClipboardList, PhoneCall, Package, Sparkles } from 'lucide-react';
 import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
+// Error FIX: Removed direct CSS import which is not supported in this environment.
+// import "react-toastify/dist/ReactToastify.css";
 
 function Home_Supplier() {
   const [showPickupModal, setShowPickupModal] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [showDeliveries, setShowDeliveries] = useState(false); // State to toggle deliveries table
 
-  // ✅ Get logged-in supplier from localStorage
-  const supplierData = JSON.parse(localStorage.getItem("supplier")) || {};
-
-  const [supplier] = useState({
-    name: supplierData.companyName || "ABC Suppliers Pvt Ltd",
-    contact: supplierData.phone || "+91 98765 43210",
-    deliveriesToday: 5,
-    pendingDeliveries: 12,
-    lastDelivery: "Yesterday"
+  const [supplier, setSupplier] = useState({
+    id: null,
+    name: "Loading...",
+    phone: "Fetching...",
+    deliveriesToday: 0,
+    pendingDeliveries: 0,
+    lastDelivery: "N/A"
   });
-
 
   const [pickupForm, setPickupForm] = useState({
     item: "",
@@ -35,6 +33,24 @@ function Home_Supplier() {
 
   const [pickupRequests, setPickupRequests] = useState([]);
   const [deliveries, setDeliveries] = useState([]);
+  
+  // Pagination states
+  const [deliveryPage, setDeliveryPage] = useState(1);
+  const [deliveryPerPage, setDeliveryPerPage] = useState(5);
+  const [pickupPage, setPickupPage] = useState(1);
+  const [pickupPerPage, setPickupPerPage] = useState(5);
+
+  // Error FIX: Dynamically load react-toastify CSS
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/react-toastify@9.1.3/dist/ReactToastify.min.css';
+    document.head.appendChild(link);
+
+    return () => {
+        document.head.removeChild(link);
+    };
+  }, []);
 
   const handlePickupChange = (e) => {
     const { name, value } = e.target;
@@ -51,6 +67,9 @@ function Home_Supplier() {
       setPickupRequests(prev => [...prev, newRequest]);
       setPickupForm({ item: "", quantity: "", pickupDate: "" });
       setShowPickupModal(false);
+      toast.success("Pickup requested successfully!");
+    } else {
+      toast.warn("Please fill out all fields for the pickup request.");
     }
   };
 
@@ -59,101 +78,136 @@ function Home_Supplier() {
     setDeliveryForm(prev => ({ ...prev, [name]: value }));
   };
 
- const handleDeliverySubmit = async () => {
-  const { item, quantity, deliveryDate, notes } = deliveryForm;
+  const handleDeliverySubmit = async () => {
+    const { item, quantity, deliveryDate, notes } = deliveryForm;
 
-  if (!item || !quantity || !deliveryDate) {
-    toast.warn("Please fill all required fields!", { position: "top-center" });
-    return;
-  }
-
-  try {
-    const supplier = JSON.parse(localStorage.getItem("supplier"));
-
-    const payload = {
-      item,
-      quantity: Number(quantity),
-      deliveryDate,
-      notes,
-      supplierId: supplier.id, // ✅ match backend key
-    };
-
-    const response = await fetch("http://127.0.0.1:8000/api/add_delivery/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json();
-    console.log(data);
-
-    if (response.ok) {
-      toast.success("Delivery added successfully!", { position: "top-right" });
-      setDeliveries((prev) => [...prev, payload]);
-      setDeliveryForm({ item: "", quantity: "", deliveryDate: "", notes: "" });
-      setShowDeliveryModal(false);
-    } else {
-      toast.error(`Error: ${data.error}`, { position: "top-right" });
+    if (!item || !quantity || !deliveryDate) {
+      toast.warn("Please fill all required fields!", { position: "top-center" });
+      return;
     }
-  } catch (err) {
-    toast.error("Error: " + err.message, { position: "top-right" });
-  }
-};
 
+    try {
+      // FIX: Consistently use "userDetails" from localStorage
+      const loggedInSupplier = JSON.parse(localStorage.getItem("userDetails"));
+      if (!loggedInSupplier || !loggedInSupplier.id) {
+        toast.error("Could not find supplier details. Please log in again.");
+        return;
+      }
 
-useEffect(() => {
+      const payload = {
+        item,
+        quantity: Number(quantity),
+        deliveryDate,
+        notes,
+        supplierId: loggedInSupplier.id,
+      };
+
+      const response = await fetch("http://127.0.0.1:8000/api/add_delivery/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success("Delivery added successfully!", { position: "top-right" });
+        // Add the new delivery to the local state for immediate UI update
+        setDeliveries((prev) => [...prev, {id: data.id || Date.now(), ...payload}]);
+        setDeliveryForm({ item: "", quantity: "", deliveryDate: "", notes: "" });
+        setShowDeliveryModal(false);
+      } else {
+        toast.error(`Error: ${data.error || 'Failed to add delivery.'}`, { position: "top-right" });
+      }
+    } catch (err) {
+      toast.error("An error occurred: " + err.message, { position: "top-right" });
+    }
+  };
+
+  useEffect(() => {
+    // FIX: Consistently use "userDetails" from localStorage
+    const storedSupplier = JSON.parse(localStorage.getItem("userDetails")) || null;
+
+    if (storedSupplier) {
+      setSupplier(prev => ({
+        ...prev,
+        id: storedSupplier.id,
+        name: storedSupplier.companyName || storedSupplier.name || "Unknown Supplier",
+        phone: storedSupplier.phone || "No contact" // Get phone from localStorage
+      }));
+    } else {
+      console.log("No supplier found in localStorage on component mount.");
+      // Handle case where user is not logged in, e.g., redirect to login
+    }
+  }, []);
+
+  useEffect(() => {
+    // This effect fetches data only when the supplier ID is known
+    if (!supplier.id) return;
+
     const fetchDeliveries = async () => {
       try {
-        const supplier = JSON.parse(localStorage.getItem("supplier"));
-        if (!supplier || !supplier.id) {
-          console.log("No supplier found in localStorage");
-          return;
-        }
-
         console.log("Fetching deliveries for supplier ID:", supplier.id);
         const response = await fetch(`http://127.0.0.1:8000/api/get_deliveries/${supplier.id}/`);
-        const data = await response.json();
-
-        console.log("Deliveries response:", data);
-
-        if (response.ok) {
-          // Handle both possible response structures
-          const deliveriesData = data.deliveries || data || [];
-          setDeliveries(deliveriesData);
-        } else {
-          toast.error(`Failed to load deliveries: ${data.error || 'Unknown error'}`, { position: "top-right" });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
+        const data = await response.json();
+        const deliveriesData = data.deliveries || data || [];
+        setDeliveries(deliveriesData);
       } catch (err) {
         console.error("Error fetching deliveries:", err);
         toast.error("Error fetching deliveries: " + err.message, { position: "top-right" });
       }
     };
 
-    fetchDeliveries();
-  }, []);
-
-useEffect(() => {
-  const fetchPickups = async () => {
-    try {
-      const supplier = JSON.parse(localStorage.getItem("supplier"));
-      if (!supplier?.id) return;
-
-      const res = await fetch(`http://127.0.0.1:8000/api/get_pickups/${supplier.id}/`);
-      const data = await res.json();
-
-      if (res.ok && Array.isArray(data.pickups)) {
-        setPickupRequests(data.pickups);
-      } else {
-        setPickupRequests([]);
+    const fetchPickups = async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/get_pickups/${supplier.id}/`);
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+        }
+        const data = await res.json();
+        if (Array.isArray(data.pickups)) {
+          setPickupRequests(data.pickups);
+        } else {
+          setPickupRequests([]);
+        }
+      } catch (err) {
+        console.error("Error fetching pickups:", err);
+        toast.error("Error fetching pickups: " + err.message, { position: "top-right" });
       }
-    } catch (err) {
-      toast.error("Error fetching pickups: " + err.message, { position: "top-right" });
+    };
+
+    fetchDeliveries();
+    fetchPickups();
+  }, [supplier.id]);
+
+
+  // Pagination calculations
+  const totalDeliveryPages = Math.ceil(deliveries.length / deliveryPerPage);
+  const startDeliveryIndex = (deliveryPage - 1) * deliveryPerPage;
+  const endDeliveryIndex = startDeliveryIndex + deliveryPerPage;
+  const currentDeliveries = deliveries.slice(startDeliveryIndex, endDeliveryIndex);
+
+  const totalPickupPages = Math.ceil(pickupRequests.length / pickupPerPage);
+  const startPickupIndex = (pickupPage - 1) * pickupPerPage;
+  const endPickupIndex = startPickupIndex + pickupPerPage;
+  const currentPickups = pickupRequests.slice(startPickupIndex, endPickupIndex);
+
+  const handleDeliveryPageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalDeliveryPages) {
+      setDeliveryPage(newPage);
     }
   };
 
-  fetchPickups();
-}, []);
-
+  const handlePickupPageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPickupPages) {
+      setPickupPage(newPage);
+    }
+  };
 
   return (
     <div style={{
@@ -164,7 +218,7 @@ useEffect(() => {
       padding: '0',
       margin: '0',
       position: 'relative',
-      overflow: 'hidden',
+      overflowX: 'hidden',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
     }}>
       <div style={{
@@ -249,7 +303,7 @@ useEffect(() => {
           fontWeight: 500
         }}>
           <PhoneCall size={18} />
-          <span>{supplier.contact}</span>
+          <span>{supplier.phone}</span>
         </div>
       </div>
 
@@ -269,7 +323,7 @@ useEffect(() => {
         }}>
           {[
             { icon: ClipboardList, label: "Today's Deliveries", value: supplier.deliveriesToday },
-            { icon: Package, label: "Pending Deliveries", value: supplier.pendingDeliveries },
+            { icon: Package, label: "Total Deliveries", value: supplier.pendingDeliveries },
             { icon: Truck, label: "Last Delivery", value: supplier.lastDelivery }
           ].map((stat, idx) => (
             <div key={idx} style={{
@@ -336,7 +390,7 @@ useEffect(() => {
           marginBottom: '40px'
         }}>
           {[
-            { icon: ClipboardList, label: "View Deliveries", onClick: null },
+            { icon: ClipboardList, label: showDeliveries ? "Hide Deliveries" : "View Deliveries", onClick: () => setShowDeliveries(prev => !prev) },
             { icon: Package, label: "Add New Delivery", onClick: () => setShowDeliveryModal(true) },
             { icon: PhoneCall, label: "Contact Warehouse", onClick: null },
             { icon: Truck, label: "Request Pickup", onClick: () => setShowPickupModal(true) }
@@ -376,97 +430,232 @@ useEffect(() => {
           ))}
         </div>
 
-        <div style={{
-          background: 'rgba(15, 23, 42, 0.8)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
-          padding: '32px',
-          marginBottom: '32px',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-          border: '1px solid rgba(255, 255, 255, 0.05)'
-        }}>
+        {/* Deliveries Table with Pagination */}
+        {showDeliveries && (
           <div style={{
-            fontSize: '22px',
-            fontWeight: 700,
-            color: '#fff',
-            marginBottom: '24px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
+            background: 'rgba(15, 23, 42, 0.8)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: '20px',
+            padding: '32px',
+            marginBottom: '32px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.05)'
           }}>
-            <Package size={24} color="#60a5fa" />
-            Deliveries
-          </div>
-          {deliveries.length === 0 ? (
             <div style={{
-              textAlign: 'center',
-              padding: '48px',
-              color: '#64748b',
-              fontSize: '16px'
-            }}>No deliveries added yet.</div>
-          ) : (
-            <div style={{overflowX: 'auto'}}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'separate',
-                borderSpacing: '0 8px'
-              }}>
-                <thead>
-                  <tr>
-                    {['Item', 'Quantity', 'Delivery Date', 'Notes'].map((header, idx) => (
-                      <th key={idx} style={{
+              fontSize: '22px',
+              fontWeight: 700,
+              color: '#fff',
+              marginBottom: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Package size={24} color="#60a5fa" />
+                Deliveries
+              </div>
+              {deliveries.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 500 }}>Items per page:</label>
+                  <select 
+                    value={deliveryPerPage} 
+                    onChange={(e) => {
+                      setDeliveryPerPage(Number(e.target.value));
+                      setDeliveryPage(1);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: '2px solid rgba(71, 85, 105, 0.4)',
+                      background: 'rgba(30, 41, 59, 0.6)',
+                      color: '#fff',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                    <option value={20}>20</option>
+                  </select>
+                </div>
+              )}
+            </div>
+            {deliveries.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '48px',
+                color: '#64748b',
+                fontSize: '16px'
+              }}>No deliveries added yet.</div>
+            ) : (
+              <>
+                <div style={{overflowX: 'auto'}}>
+                  <table style={{
+                    width: '100%',
+                    borderCollapse: 'separate',
+                    borderSpacing: '0 8px'
+                  }}>
+                    <thead>
+                      <tr>
+                        {['Item', 'Quantity', 'Delivery Date', 'Notes'].map((header, idx) => (
+                          <th key={idx} style={{
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                            color: '#fff',
+                            padding: '14px 16px',
+                            textAlign: 'left',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            borderTopLeftRadius: idx === 0 ? '12px' : '0',
+                            borderTopRightRadius: idx === 3 ? '12px' : '0'
+                          }}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentDeliveries.map((delivery, index) => (
+                        <tr key={delivery.id || index} style={{
+                          background: 'rgba(30, 41, 59, 0.6)',
+                          transition: 'all 0.2s'
+                        }}>
+                          <td style={{
+                            padding: '16px',
+                            fontSize: '15px',
+                            color: '#e2e8f0',
+                            borderTopLeftRadius: '8px',
+                            borderBottomLeftRadius: '8px'
+                          }}>{delivery.item}</td>
+                          <td style={{
+                            padding: '16px',
+                            fontSize: '15px',
+                            color: '#e2e8f0'
+                          }}>{delivery.quantity}</td>
+                          <td style={{
+                            padding: '16px',
+                            fontSize: '15px',
+                            color: '#e2e8f0'
+                          }}>{delivery.deliveryDate}</td>
+                          <td style={{
+                            padding: '16px',
+                            fontSize: '15px',
+                            color: '#e2e8f0',
+                            borderTopRightRadius: '8px',
+                            borderBottomRightRadius: '8px'
+                          }}>{delivery.notes || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {totalDeliveryPages > 1 && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '24px',
+                    paddingTop: '24px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                    flexWrap: 'wrap',
+                    gap: '16px'
+                  }}>
+                    <div style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 500 }}>
+                      Showing {startDeliveryIndex + 1} to {Math.min(endDeliveryIndex, deliveries.length)} of {deliveries.length} deliveries
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => handleDeliveryPageChange(1)}
+                        disabled={deliveryPage === 1}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: deliveryPage === 1 ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+                          color: deliveryPage === 1 ? '#64748b' : '#60a5fa',
+                          cursor: deliveryPage === 1 ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        First
+                      </button>
+                      <button
+                        onClick={() => handleDeliveryPageChange(deliveryPage - 1)}
+                        disabled={deliveryPage === 1}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: deliveryPage === 1 ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+                          color: deliveryPage === 1 ? '#64748b' : '#60a5fa',
+                          cursor: deliveryPage === 1 ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Previous
+                      </button>
+                      <div style={{
+                        padding: '8px 16px',
+                        borderRadius: '8px',
                         background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
                         color: '#fff',
-                        padding: '14px 16px',
-                        textAlign: 'left',
                         fontSize: '14px',
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        borderTopLeftRadius: idx === 0 ? '12px' : '0',
-                        borderTopRightRadius: idx === 3 ? '12px' : '0'
-                      }}>{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {deliveries.map((delivery) => (
-                    <tr key={delivery.id} style={{
-                      background: 'rgba(30, 41, 59, 0.6)',
-                      transition: 'all 0.2s'
-                    }}>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0',
-                        borderTopLeftRadius: '8px',
-                        borderBottomLeftRadius: '8px'
-                      }}>{delivery.item}</td>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0'
-                      }}>{delivery.quantity}</td>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0'
-                      }}>{delivery.deliveryDate}</td>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0',
-                        borderTopRightRadius: '8px',
-                        borderBottomRightRadius: '8px'
-                      }}>{delivery.notes}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                        fontWeight: 600
+                      }}>
+                        {deliveryPage} / {totalDeliveryPages}
+                      </div>
+                      <button
+                        onClick={() => handleDeliveryPageChange(deliveryPage + 1)}
+                        disabled={deliveryPage === totalDeliveryPages}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: deliveryPage === totalDeliveryPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+                          color: deliveryPage === totalDeliveryPages ? '#64748b' : '#60a5fa',
+                          cursor: deliveryPage === totalDeliveryPages ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Next
+                      </button>
+                      <button
+                        onClick={() => handleDeliveryPageChange(totalDeliveryPages)}
+                        disabled={deliveryPage === totalDeliveryPages}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: deliveryPage === totalDeliveryPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+                          color: deliveryPage === totalDeliveryPages ? '#64748b' : '#60a5fa',
+                          cursor: deliveryPage === totalDeliveryPages ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Last
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
+        {/* Pickup Requests Table with Pagination */}
         <div style={{
           background: 'rgba(15, 23, 42, 0.8)',
           backdropFilter: 'blur(20px)',
@@ -483,10 +672,42 @@ useEffect(() => {
             marginBottom: '24px',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
             gap: '12px'
           }}>
-            <Truck size={24} color="#60a5fa" />
-            Pickup Requests
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Truck size={24} color="#60a5fa" />
+              Pickup Requests
+            </div>
+            {pickupRequests.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 500 }}>Items per page:</label>
+                <select 
+                  value={pickupPerPage} 
+                  onChange={(e) => {
+                    setPickupPerPage(Number(e.target.value));
+                    setPickupPage(1);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '2px solid rgba(71, 85, 105, 0.4)',
+                    background: 'rgba(30, 41, 59, 0.6)',
+                    color: '#fff',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={20}>20</option>
+                </select>
+              </div>
+            )}
           </div>
           {pickupRequests.length === 0 ? (
             <div style={{
@@ -496,65 +717,100 @@ useEffect(() => {
               fontSize: '16px'
             }}>No pickup requests yet.</div>
           ) : (
-            <div style={{overflowX: 'auto'}}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'separate',
-                borderSpacing: '0 8px'
-              }}>
-                <thead>
-                  <tr>
-                    {['Item', 'Quantity', 'Pickup Date', 'Status'].map((header, idx) => (
-                      <th key={idx} style={{
-                        background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
-                        color: '#fff',
-                        padding: '14px 16px',
-                        textAlign: 'left',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        borderTopLeftRadius: idx === 0 ? '12px' : '0',
-                        borderTopRightRadius: idx === 3 ? '12px' : '0'
-                      }}>{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pickupRequests.map((req) => (
-                    <tr key={req.id} style={{
-                      background: 'rgba(30, 41, 59, 0.6)',
-                      transition: 'all 0.2s'
-                    }}>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0',
-                        borderTopLeftRadius: '8px',
-                        borderBottomLeftRadius: '8px'
-                      }}>{req.item}</td>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0'
-                      }}>{req.quantity}</td>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0'
-                      }}>{req.pickupDate}</td>
-                      <td style={{
-                        padding: '16px',
-                        fontSize: '15px',
-                        color: '#e2e8f0',
-                        borderTopRightRadius: '8px',
-                        borderBottomRightRadius: '8px'
-                      }}>{req.status}</td>
+            <>
+              <div style={{overflowX: 'auto'}}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'separate',
+                  borderSpacing: '0 8px'
+                }}>
+                  <thead>
+                    <tr>
+                      {['Item', 'Quantity', 'Pickup Date', 'Status'].map((header, idx) => (
+                        <th key={idx} style={{
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                          color: '#fff',
+                          padding: '14px 16px',
+                          textAlign: 'left',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          borderTopLeftRadius: idx === 0 ? '12px' : '0',
+                          borderTopRightRadius: idx === 3 ? '12px' : '0'
+                        }}>{header}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {currentPickups.map((req, index) => (
+                      <tr key={req.id || index} style={{
+                        background: 'rgba(30, 41, 59, 0.6)',
+                        transition: 'all 0.2s'
+                      }}>
+                        <td style={{
+                          padding: '16px',
+                          fontSize: '15px',
+                          color: '#e2e8f0',
+                          borderTopLeftRadius: '8px',
+                          borderBottomLeftRadius: '8px'
+                        }}>{req.item}</td>
+                        <td style={{
+                          padding: '16px',
+                          fontSize: '15px',
+                          color: '#e2e8f0'
+                        }}>{req.quantity}</td>
+                        <td style={{
+                          padding: '16px',
+                          fontSize: '15px',
+                          color: '#e2e8f0'
+                        }}>{req.pickupDate}</td>
+                        <td style={{
+                          padding: '16px',
+                          fontSize: '15px',
+                          color: '#e2e8f0',
+                          borderTopRightRadius: '8px',
+                          borderBottomRightRadius: '8px'
+                        }}>{req.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalPickupPages > 1 && (
+                  <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginTop: '24px',
+                      paddingTop: '24px',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                      flexWrap: 'wrap',
+                      gap: '16px'
+                  }}>
+                      <div style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 500 }}>
+                          Showing {startPickupIndex + 1} to {Math.min(endPickupIndex, pickupRequests.length)} of {pickupRequests.length} requests
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <button onClick={() => handlePickupPageChange(1)} disabled={pickupPage === 1} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: pickupPage === 1 ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: pickupPage === 1 ? '#64748b' : '#60a5fa', cursor: pickupPage === 1 ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s' }}>
+                              First
+                          </button>
+                          <button onClick={() => handlePickupPageChange(pickupPage - 1)} disabled={pickupPage === 1} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: pickupPage === 1 ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: pickupPage === 1 ? '#64748b' : '#60a5fa', cursor: pickupPage === 1 ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s' }}>
+                              Previous
+                          </button>
+                          <div style={{ padding: '8px 16px', borderRadius: '8px', background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', color: '#fff', fontSize: '14px', fontWeight: 600 }}>
+                              {pickupPage} / {totalPickupPages}
+                          </div>
+                          <button onClick={() => handlePickupPageChange(pickupPage + 1)} disabled={pickupPage === totalPickupPages} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: pickupPage === totalPickupPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: pickupPage === totalPickupPages ? '#64748b' : '#60a5fa', cursor: pickupPage === totalPickupPages ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s' }}>
+                              Next
+                          </button>
+                          <button onClick={() => handlePickupPageChange(totalPickupPages)} disabled={pickupPage === totalPickupPages} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: pickupPage === totalPickupPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: pickupPage === totalPickupPages ? '#64748b' : '#60a5fa', cursor: pickupPage === totalPickupPages ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s' }}>
+                              Last
+                          </button>
+                      </div>
+                  </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -687,31 +943,33 @@ useEffect(() => {
           0%, 100% { opacity: 0.3; }
           50% { opacity: 0.5; }
         }
-        input:focus, textarea:focus {
+        input:focus, textarea:focus, select:focus {
           border-color: rgba(59, 130, 246, 0.6) !important;
           box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
         }
         button:hover:not(:disabled) {
           transform: translateY(-2px);
+          box-shadow: 0 8px 30px rgba(59, 130, 246, 0.5) !important;
         }
         button:active:not(:disabled) {
           transform: translateY(0px);
         }
       `}</style>
       <ToastContainer
-  position="top-right"
-  autoClose={3000}
-  hideProgressBar={false}
-  newestOnTop={false}
-  closeOnClick
-  pauseOnFocusLoss
-  draggable
-  pauseOnHover
-  theme="dark"
-/>
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
+      />
 
     </div>
   );
 }
 
 export default Home_Supplier;
+
