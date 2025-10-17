@@ -7,6 +7,7 @@ import Home from './components/Admin/Home'
 import Home_Supplier from './components/Supplier/Home_Supplier'
 import WarehouseReport from './components/Admin/WarehouseReports'
 import Login from './components/Login'
+import RequestPickupPage from './components/Supplier/RequestPickupPage'
 
 function App() {
 
@@ -20,6 +21,7 @@ function App() {
           <Route path='/' element={<HomePage/>}/>
           <Route path='/supplierhome' element={<Home_Supplier/>}/>
           <Route path='/warehousereports' element={<WarehouseReport/>}/>
+          <Route path='/requestpickup' element={<RequestPickupPage/>}/>
         </Routes>
       </div>
     </>

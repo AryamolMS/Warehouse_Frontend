@@ -26,7 +26,7 @@ export default function Login() {
   try {
     // Mock admin login
     const adminEmail = 'admin@gmail.com';
-    const adminPassword = 'admin1234';
+    const adminPassword = 'Admin@123';
     if (email === adminEmail && password === adminPassword) {
       const adminDetails = { 
         email: adminEmail, 
