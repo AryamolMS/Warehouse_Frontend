@@ -8,6 +8,9 @@ import Home_Supplier from './components/Supplier/Home_Supplier'
 import WarehouseReport from './components/Admin/WarehouseReports'
 import Login from './components/Login'
 import RequestPickupPage from './components/Supplier/RequestPickupPage'
+import AdminPickupRequests from './components/Admin/AdminPickupRequests'
+import AdminStockManagement from './components/Admin/AdminStockManagement'
+import WarehouseInventory from './components/Admin/WarehouseInventory'
 
 function App() {
 
@@ -22,6 +25,9 @@ function App() {
           <Route path='/supplierhome' element={<Home_Supplier/>}/>
           <Route path='/warehousereports' element={<WarehouseReport/>}/>
           <Route path='/requestpickup' element={<RequestPickupPage/>}/>
+          <Route path='/adminpickup' element={<AdminPickupRequests/>}/>
+          <Route path='/admin_stock_management' element={<AdminStockManagement/>}/>
+          <Route path='/warehouseinventory' element={<WarehouseInventory/>}/>
         </Routes>
       </div>
     </>

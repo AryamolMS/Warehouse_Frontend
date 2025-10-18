@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Truck, ClipboardList, PhoneCall, Package, Sparkles, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Truck, ClipboardList, PhoneCall, Package, Sparkles, X, CheckCircle, AlertCircle, Thermometer, Calendar, Box, Weight } from 'lucide-react';
 
 function Home_Supplier() {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
@@ -18,7 +18,21 @@ function Home_Supplier() {
   const [deliveryForm, setDeliveryForm] = useState({
     item: "",
     quantity: "",
+    unit: "kg",
+    category: "",
     deliveryDate: "",
+    deliveryTime: "",
+    storageType: "",
+    expiryDate: "",
+    batchNumber: "",
+    manufacturer: "",
+    packagingType: "",
+    palletCount: "",
+    specialHandling: "",
+    temperatureRequirement: "",
+    hazardousClass: "",
+    invoiceNumber: "",
+    poNumber: "",
     notes: ""
   });
   const [deliveries, setDeliveries] = useState([]);
@@ -54,8 +68,8 @@ function Home_Supplier() {
   };
 
   const handleDeliverySubmit = async () => {
-    const { item, quantity, deliveryDate, notes } = deliveryForm;
-    if (!item || !quantity || !deliveryDate) {
+    const { item, quantity, unit, category, deliveryDate, storageType } = deliveryForm;
+    if (!item || !quantity || !unit || !category || !deliveryDate || !storageType) {
       showToast("Please fill all required fields!", 'warning');
       return;
     }
@@ -66,12 +80,14 @@ function Home_Supplier() {
         return;
       }
       const payload = {
-        item,
+        ...deliveryForm,
         quantity: Number(quantity),
-        deliveryDate,
-        notes,
+        palletCount: deliveryForm.palletCount ? Number(deliveryForm.palletCount) : null,
         supplierId: loggedInSupplier.id,
       };
+      
+      console.log("Sending delivery payload:", payload);
+      
       const response = await fetch("http://127.0.0.1:8000/api/add_delivery/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -79,16 +95,14 @@ function Home_Supplier() {
       });
       const data = await response.json();
       if (response.ok) {
-        showToast("Delivery added successfully!", 'success');
+        showToast("Stock delivery scheduled successfully!", 'success');
         const newDelivery = {id: data.id || Date.now(), ...payload};
         setDeliveries((prev) => [...prev, newDelivery]);
         
-        // Update stats after adding delivery
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const updatedDeliveries = [...deliveries, newDelivery];
         
-        // Count today's deliveries with flexible date comparison
         const todayCount = updatedDeliveries.filter(d => {
           if (!d.deliveryDate) return false;
           const deliveryDateStr = d.deliveryDate.split('T')[0];
@@ -97,7 +111,6 @@ function Home_Supplier() {
         
         const totalCount = updatedDeliveries.length;
         
-        // Get last delivery date
         const sortedDeliveries = [...updatedDeliveries].sort((a, b) => 
           new Date(b.deliveryDate) - new Date(a.deliveryDate)
         );
@@ -110,10 +123,29 @@ function Home_Supplier() {
           lastDelivery: lastDeliveryDate
         }));
         
-        setDeliveryForm({ item: "", quantity: "", deliveryDate: "", notes: "" });
+        setDeliveryForm({ 
+          item: "", 
+          quantity: "", 
+          unit: "kg",
+          category: "",
+          deliveryDate: "", 
+          deliveryTime: "",
+          storageType: "",
+          expiryDate: "",
+          batchNumber: "",
+          manufacturer: "",
+          packagingType: "",
+          palletCount: "",
+          specialHandling: "",
+          temperatureRequirement: "",
+          hazardousClass: "",
+          invoiceNumber: "",
+          poNumber: "",
+          notes: "" 
+        });
         setShowDeliveryModal(false);
       } else {
-        showToast(`Error: ${data.error || 'Failed to add delivery.'}`, 'error');
+        showToast(`Error: ${data.error || 'Failed to schedule delivery.'}`, 'error');
       }
     } catch (err) {
       showToast("An error occurred: " + err.message, 'error');
@@ -145,11 +177,9 @@ function Home_Supplier() {
         const deliveriesData = data.deliveries || data || [];
         setDeliveries(deliveriesData);
         
-        // Calculate statistics
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         
-        // Count today's deliveries with flexible date comparison
         const todayCount = deliveriesData.filter(d => {
           if (!d.deliveryDate) return false;
           const deliveryDateStr = d.deliveryDate.split('T')[0];
@@ -158,7 +188,6 @@ function Home_Supplier() {
         
         const totalCount = deliveriesData.length;
         
-        // Get last delivery date
         let lastDeliveryDate = "N/A";
         if (deliveriesData.length > 0) {
           const sortedDeliveries = [...deliveriesData].sort((a, b) => 
@@ -167,7 +196,6 @@ function Home_Supplier() {
           lastDeliveryDate = sortedDeliveries[0].deliveryDate.split('T')[0];
         }
         
-        // Update supplier stats
         setSupplier(prev => ({
           ...prev,
           deliveriesToday: todayCount,
@@ -245,7 +273,7 @@ function Home_Supplier() {
         <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '40px'}}>
           {[
             { icon: ClipboardList, label: showDeliveries ? "Hide Deliveries" : "View Deliveries", onClick: () => setShowDeliveries(prev => !prev) },
-            { icon: Package, label: "Add New Delivery", onClick: () => setShowDeliveryModal(true) },
+            { icon: Package, label: "Send Stock to Warehouse", onClick: () => setShowDeliveryModal(true) },
             { icon: PhoneCall, label: "Contact Warehouse", onClick: () => setShowWarehouseModal(true) },
             { icon: Truck, label: "Request Pickup", onClick: ()=> navigate('/requestpickup')  }
           ].map((action, idx) => (
@@ -263,7 +291,7 @@ function Home_Supplier() {
             <div style={{fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px'}}>
               <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
                 <Package size={24} color="#60a5fa" />
-                Deliveries
+                Stock Deliveries
               </div>
               {deliveries.length > 0 && (
                 <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
@@ -278,15 +306,15 @@ function Home_Supplier() {
               )}
             </div>
             {deliveries.length === 0 ? (
-              <div style={{textAlign: 'center', padding: '48px', color: '#64748b', fontSize: '16px'}}>No deliveries added yet.</div>
+              <div style={{textAlign: 'center', padding: '48px', color: '#64748b', fontSize: '16px'}}>No deliveries scheduled yet.</div>
             ) : (
               <>
                 <div style={{overflowX: 'auto'}}>
                   <table style={{width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px'}}>
                     <thead>
                       <tr>
-                        {['Item', 'Quantity', 'Delivery Date', 'Notes'].map((header, idx) => (
-                          <th key={idx} style={{background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', color: '#fff', padding: '14px 16px', textAlign: 'left', fontSize: '14px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', borderTopLeftRadius: idx === 0 ? '12px' : '0', borderTopRightRadius: idx === 3 ? '12px' : '0'}}>{header}</th>
+                        {['Item', 'Quantity', 'Category', 'Delivery Date', 'Storage Type', 'Batch #'].map((header, idx) => (
+                          <th key={idx} style={{background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', color: '#fff', padding: '14px 16px', textAlign: 'left', fontSize: '14px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', borderTopLeftRadius: idx === 0 ? '12px' : '0', borderTopRightRadius: idx === 5 ? '12px' : '0'}}>{header}</th>
                         ))}
                       </tr>
                     </thead>
@@ -294,9 +322,11 @@ function Home_Supplier() {
                       {currentDeliveries.map((delivery, index) => (
                         <tr key={delivery.id || index} style={{background: 'rgba(30, 41, 59, 0.6)', transition: 'all 0.2s'}}>
                           <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0', borderTopLeftRadius: '8px', borderBottomLeftRadius: '8px'}}>{delivery.item}</td>
-                          <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0'}}>{delivery.quantity}</td>
+                          <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0'}}>{delivery.quantity} {delivery.unit || ''}</td>
+                          <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0'}}>{delivery.category || '-'}</td>
                           <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0'}}>{delivery.deliveryDate}</td>
-                          <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0', borderTopRightRadius: '8px', borderBottomRightRadius: '8px'}}>{delivery.notes || '-'}</td>
+                          <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0'}}>{delivery.storageType || '-'}</td>
+                          <td style={{padding: '16px', fontSize: '15px', color: '#e2e8f0', borderTopRightRadius: '8px', borderBottomRightRadius: '8px'}}>{delivery.batchNumber || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -310,8 +340,7 @@ function Home_Supplier() {
                     <div style={{display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'}}>
                       <button onClick={() => handleDeliveryPageChange(1)} disabled={deliveryPage === 1} style={{padding: '8px 14px', borderRadius: '8px', border: 'none', background: deliveryPage === 1 ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: deliveryPage === 1 ? '#64748b' : '#60a5fa', cursor: deliveryPage === 1 ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s'}}>First</button>
                       <button onClick={() => handleDeliveryPageChange(deliveryPage - 1)} disabled={deliveryPage === 1} style={{padding: '8px 14px', borderRadius: '8px', border: 'none', background: deliveryPage === 1 ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: deliveryPage === 1 ? '#64748b' : '#60a5fa', cursor: deliveryPage === 1 ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s'}}>Previous</button>
-                      <div style={{padding: '8px 16px', borderRadius: '8px', background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', color: '#fff', fontSize: '14px', fontWeight: 600}}>{deliveryPage} / {totalDeliveryPages}</div>
-                      <button onClick={() => handleDeliveryPageChange(deliveryPage + 1)} disabled={deliveryPage === totalDeliveryPages} style={{padding: '8px 14px', borderRadius: '8px', border: 'none', background: deliveryPage === totalDeliveryPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: deliveryPage === totalDeliveryPages ? '#64748b' : '#60a5fa', cursor: deliveryPage === totalDeliveryPages ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s'}}>Next</button>
+                      <div style={{padding: '8px 16px', borderRadius: '8px', background: 'linear-gradient(135deg, rgb(59, 130, 246) 0%, rgb(139, 92, 246) 100%)', color: '#fff', fontSize: '14px', fontWeight: 600}}>{deliveryPage} / {totalDeliveryPages}</div>                      <button onClick={() => handleDeliveryPageChange(deliveryPage + 1)} disabled={deliveryPage === totalDeliveryPages} style={{padding: '8px 14px', borderRadius: '8px', border: 'none', background: deliveryPage === totalDeliveryPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: deliveryPage === totalDeliveryPages ? '#64748b' : '#60a5fa', cursor: deliveryPage === totalDeliveryPages ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s'}}>Next</button>
                       <button onClick={() => handleDeliveryPageChange(totalDeliveryPages)} disabled={deliveryPage === totalDeliveryPages} style={{padding: '8px 14px', borderRadius: '8px', border: 'none', background: deliveryPage === totalDeliveryPages ? 'rgba(71, 85, 105, 0.3)' : 'rgba(59, 130, 246, 0.2)', color: deliveryPage === totalDeliveryPages ? '#64748b' : '#60a5fa', cursor: deliveryPage === totalDeliveryPages ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 600, transition: 'all 0.2s'}}>Last</button>
                     </div>
                   </div>
@@ -322,30 +351,193 @@ function Home_Supplier() {
         )}
       </div>
 
+      {/* ENHANCED DELIVERY MODAL WITH MORE FIELDS */}
       {showDeliveryModal && (
-        <div style={{position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0, 0, 0, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)'}} onClick={() => setShowDeliveryModal(false)}>
-          <div style={{background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '36px', minWidth: '420px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.05)', color: '#fff'}} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{marginBottom: '24px', color: '#fff', fontSize: '24px', fontWeight: 700}}>Add New Delivery</h2>
+        <div style={{position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0, 0, 0, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)', overflowY: 'auto', padding: '20px'}} onClick={() => setShowDeliveryModal(false)}>
+          <div style={{background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '36px', maxWidth: '1000px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.05)', color: '#fff'}} onClick={(e) => e.stopPropagation()}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px'}}>
+              <div style={{background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', borderRadius: '12px', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(59, 130, 246, 0.4)'}}>
+                <Package size={24} color="#fff" />
+              </div>
+              <h2 style={{margin: 0, color: '#fff', fontSize: '24px', fontWeight: 700}}>Send Stock to Warehouse</h2>
+            </div>
+            
             <div>
-              <div style={{marginBottom: '20px'}}>
-                <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px', letterSpacing: '0.3px'}}>Item Name</label>
-                <input type="text" name="item" value={deliveryForm.item} onChange={handleDeliveryChange} style={{width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '15px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
-              </div>
-              <div style={{marginBottom: '20px'}}>
-                <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px', letterSpacing: '0.3px'}}>Quantity</label>
-                <input type="number" name="quantity" value={deliveryForm.quantity} onChange={handleDeliveryChange} min="1" style={{width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '15px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
-              </div>
-              <div style={{marginBottom: '20px'}}>
-                <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px', letterSpacing: '0.3px'}}>Delivery Date</label>
-                <input type="date" name="deliveryDate" value={deliveryForm.deliveryDate} onChange={handleDeliveryChange} style={{width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '15px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
-              </div>
+              {/* Item Details Section */}
               <div style={{marginBottom: '28px'}}>
-                <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px', letterSpacing: '0.3px'}}>Notes</label>
-                <textarea name="notes" value={deliveryForm.notes} onChange={handleDeliveryChange} rows={3} style={{width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '15px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', resize: 'vertical', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                <h3 style={{color: '#60a5fa', fontSize: '16px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <Box size={18} />
+                  Item Details
+                </h3>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px'}}>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Item Name <span style={{color: '#ef4444'}}>*</span></label>
+                    <input type="text" name="item" value={deliveryForm.item} onChange={handleDeliveryChange} placeholder="e.g., Organic Rice" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Quantity <span style={{color: '#ef4444'}}>*</span></label>
+                    <input type="number" name="quantity" value={deliveryForm.quantity} onChange={handleDeliveryChange} min="1" placeholder="100" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Unit <span style={{color: '#ef4444'}}>*</span></label>
+                    <select name="unit" value={deliveryForm.unit} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.3s'}}>
+                      <option value="kg">Kilograms (kg)</option>
+                      <option value="lbs">Pounds (lbs)</option>
+                      <option value="pieces">Pieces</option>
+                      <option value="boxes">Boxes</option>
+                      <option value="liters">Liters</option>
+                      <option value="tons">Tons</option>
+                      <option value="pallets">Pallets</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Category <span style={{color: '#ef4444'}}>*</span></label>
+                    <select name="category" value={deliveryForm.category} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.3s'}}>
+                      <option value="">Select Category</option>
+                      <option value="Food">Food Items</option>
+                      <option value="Electronics">Electronics</option>
+                      <option value="Textiles">Textiles & Clothing</option>
+                      <option value="Raw Materials">Raw Materials</option>
+                      <option value="Pharmaceuticals">Pharmaceuticals</option>
+                      <option value="Chemicals">Chemicals</option>
+                      <option value="Perishables">Perishables</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Batch Number</label>
+                    <input type="text" name="batchNumber" value={deliveryForm.batchNumber} onChange={handleDeliveryChange} placeholder="e.g., BTH-2025-001" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Manufacturer</label>
+                    <input type="text" name="manufacturer" value={deliveryForm.manufacturer} onChange={handleDeliveryChange} placeholder="Manufacturer name" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                </div>
               </div>
-              <div style={{display: 'flex', justifyContent: 'flex-end', gap: '12px'}}>
+
+              {/* Delivery Schedule Section */}
+              <div style={{marginBottom: '28px'}}>
+                <h3 style={{color: '#60a5fa', fontSize: '16px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <Calendar size={18} />
+                  Delivery Schedule
+                </h3>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px'}}>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Delivery Date <span style={{color: '#ef4444'}}>*</span></label>
+                    <input type="date" name="deliveryDate" value={deliveryForm.deliveryDate} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Delivery Time</label>
+                    <input type="time" name="deliveryTime" value={deliveryForm.deliveryTime} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Expiry Date</label>
+                    <input type="date" name="expiryDate" value={deliveryForm.expiryDate} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Storage & Packaging Section */}
+              <div style={{marginBottom: '28px'}}>
+                <h3 style={{color: '#60a5fa', fontSize: '16px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <Thermometer size={18} />
+                  Storage & Packaging
+                </h3>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px'}}>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Storage Type <span style={{color: '#ef4444'}}>*</span></label>
+                    <select name="storageType" value={deliveryForm.storageType} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.3s'}}>
+                      <option value="">Select Storage Type</option>
+                      <option value="Ambient">Ambient (Room Temperature)</option>
+                      <option value="Refrigerated">Refrigerated (2-8°C)</option>
+                      <option value="Frozen">Frozen (-18°C or below)</option>
+                      <option value="Climate Controlled">Climate Controlled</option>
+                      <option value="Dry Storage">Dry Storage</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Temperature Requirement</label>
+                    <input type="text" name="temperatureRequirement" value={deliveryForm.temperatureRequirement} onChange={handleDeliveryChange} placeholder="e.g., 2-8°C" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Packaging Type</label>
+                    <select name="packagingType" value={deliveryForm.packagingType} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.3s'}}>
+                      <option value="">Select Packaging</option>
+                      <option value="Cardboard Boxes">Cardboard Boxes</option>
+                      <option value="Wooden Crates">Wooden Crates</option>
+                      <option value="Plastic Containers">Plastic Containers</option>
+                      <option value="Bags/Sacks">Bags/Sacks</option>
+                      <option value="Drums">Drums</option>
+                      <option value="Palletized">Palletized</option>
+                      <option value="Shrink Wrapped">Shrink Wrapped</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Pallet Count</label>
+                    <input type="number" name="palletCount" value={deliveryForm.palletCount} onChange={handleDeliveryChange} min="0" placeholder="Number of pallets" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Safety & Compliance Section */}
+              <div style={{marginBottom: '28px'}}>
+                <h3 style={{color: '#60a5fa', fontSize: '16px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <AlertCircle size={18} />
+                  Safety & Compliance
+                </h3>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px'}}>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Hazardous Classification</label>
+                    <select name="hazardousClass" value={deliveryForm.hazardousClass} onChange={handleDeliveryChange} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.3s'}}>
+                      <option value="">Non-Hazardous</option>
+                      <option value="Class 1">Class 1 - Explosives</option>
+                      <option value="Class 2">Class 2 - Gases</option>
+                      <option value="Class 3">Class 3 - Flammable Liquids</option>
+                      <option value="Class 4">Class 4 - Flammable Solids</option>
+                      <option value="Class 5">Class 5 - Oxidizers</option>
+                      <option value="Class 6">Class 6 - Toxic Materials</option>
+                      <option value="Class 7">Class 7 - Radioactive</option>
+                      <option value="Class 8">Class 8 - Corrosives</option>
+                      <option value="Class 9">Class 9 - Miscellaneous</option>
+                    </select>
+                  </div>
+                  <div style={{gridColumn: 'span 2'}}>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Special Handling Instructions</label>
+                    <input type="text" name="specialHandling" value={deliveryForm.specialHandling} onChange={handleDeliveryChange} placeholder="e.g., Fragile, Keep Upright, Stack Limit: 5" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Documentation Section */}
+              <div style={{marginBottom: '28px'}}>
+                <h3 style={{color: '#60a5fa', fontSize: '16px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <ClipboardList size={18} />
+                  Documentation
+                </h3>
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px'}}>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Invoice Number</label>
+                    <input type="text" name="invoiceNumber" value={deliveryForm.invoiceNumber} onChange={handleDeliveryChange} placeholder="e.g., INV-2025-001" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Purchase Order (PO) Number</label>
+                    <input type="text" name="poNumber" value={deliveryForm.poNumber} onChange={handleDeliveryChange} placeholder="e.g., PO-2025-001" style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Notes */}
+              <div style={{marginBottom: '28px'}}>
+                <label style={{display: 'block', marginBottom: '8px', color: '#e2e8f0', fontWeight: 600, fontSize: '14px'}}>Additional Notes</label>
+                <textarea name="notes" value={deliveryForm.notes} onChange={handleDeliveryChange} rows={3} placeholder="Any additional information, special requirements, or delivery instructions..." style={{width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid rgba(71, 85, 105, 0.4)', fontSize: '14px', outline: 'none', background: 'rgba(30, 41, 59, 0.6)', color: '#fff', resize: 'vertical', boxSizing: 'border-box', transition: 'all 0.3s'}} />
+              </div>
+
+              <div style={{display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)'}}>
                 <button onClick={() => setShowDeliveryModal(false)} style={{padding: '14px 24px', background: 'rgba(71, 85, 105, 0.4)', color: '#e2e8f0', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', transition: 'all 0.3s'}}>Cancel</button>
-                <button onClick={handleDeliverySubmit} style={{padding: '14px 24px', background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', boxShadow: '0 4px 20px rgba(59, 130, 246, 0.4)', transition: 'all 0.3s', letterSpacing: '0.3px'}}>Add Delivery</button>
+                <button onClick={handleDeliverySubmit} style={{padding: '14px 24px', background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', boxShadow: '0 4px 20px rgba(59, 130, 246, 0.4)', transition: 'all 0.3s', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <Package size={18} />
+                  Schedule Delivery
+                </button>
               </div>
             </div>
           </div>
@@ -438,6 +630,14 @@ function Home_Supplier() {
         }
         button:active:not(:disabled) {
           transform: translateY(0px);
+        }
+        input::placeholder, textarea::placeholder {
+          color: #64748b;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+          filter: invert(1);
+          cursor: pointer;
         }
       `}</style>
     </div>
