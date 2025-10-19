@@ -11,6 +11,9 @@ import RequestPickupPage from './components/Supplier/RequestPickupPage'
 import AdminPickupRequests from './components/Admin/AdminPickupRequests'
 import AdminStockManagement from './components/Admin/AdminStockManagement'
 import WarehouseInventory from './components/Admin/WarehouseInventory'
+import AcceptedPickupOrders from './components/Admin/AcceptedPickupOrders'
+import SupplierInvoices from './components/Supplier/SupplierInvoices'
+import ManageSuppliers from './components/Admin/ManageSuppliers'
 
 function App() {
 
@@ -28,6 +31,9 @@ function App() {
           <Route path='/adminpickup' element={<AdminPickupRequests/>}/>
           <Route path='/admin_stock_management' element={<AdminStockManagement/>}/>
           <Route path='/warehouseinventory' element={<WarehouseInventory/>}/>
+          <Route path='/AcceptedPickupOrders' element={<AcceptedPickupOrders/>}/>
+          <Route path='/supplier_invoices' element={<SupplierInvoices/>}/>
+          <Route path='/ManageSuppliers' element={<ManageSuppliers/>}/>
         </Routes>
       </div>
     </>

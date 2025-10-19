@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Truck, ClipboardList, PhoneCall, Package, Sparkles, X, CheckCircle, AlertCircle, Thermometer, Calendar, Box, Weight } from 'lucide-react';
+import { Truck, ClipboardList, PhoneCall, Package, Sparkles, X, CheckCircle, AlertCircle, Thermometer, Calendar, Box, Weight, FileText } from 'lucide-react';
 
 function Home_Supplier() {
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
@@ -270,21 +270,23 @@ function Home_Supplier() {
           ))}
         </div>
 
-        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '40px'}}>
-          {[
-            { icon: ClipboardList, label: showDeliveries ? "Hide Deliveries" : "View Deliveries", onClick: () => setShowDeliveries(prev => !prev) },
-            { icon: Package, label: "Send Stock to Warehouse", onClick: () => setShowDeliveryModal(true) },
-            { icon: PhoneCall, label: "Contact Warehouse", onClick: () => setShowWarehouseModal(true) },
-            { icon: Truck, label: "Request Pickup", onClick: ()=> navigate('/requestpickup')  }
-          ].map((action, idx) => (
-            <div key={idx} onClick={action.onClick} style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', border: '1px solid rgba(255, 255, 255, 0.05)', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '16px'}}>
-              <div style={{background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', borderRadius: '12px', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'}}>
-                {React.createElement(action.icon, { size: 24, color: '#fff' })}
-              </div>
-              <div style={{fontSize: '16px', fontWeight: 600, color: '#e2e8f0'}}>{action.label}</div>
-            </div>
-          ))}
-        </div>
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '40px'}}>
+  {[
+    { icon: ClipboardList, label: showDeliveries ? "Hide Deliveries" : "View Deliveries", onClick: () => setShowDeliveries(prev => !prev) },
+    { icon: Package, label: "Send Stock to Warehouse", onClick: () => setShowDeliveryModal(true) },
+    { icon: PhoneCall, label: "Contact Warehouse", onClick: () => setShowWarehouseModal(true) },
+    { icon: Truck, label: "Request Pickup", onClick: ()=> navigate('/requestpickup') },
+    { icon: FileText, label: "View Invoices", onClick: ()=> navigate('/supplier_invoices') }  // ADD THIS LINE
+  ].map((action, idx) => (
+    <div key={idx} onClick={action.onClick} style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', border: '1px solid rgba(255, 255, 255, 0.05)', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', gap: '16px'}}>
+      <div style={{background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', borderRadius: '12px', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'}}>
+        {React.createElement(action.icon, { size: 24, color: '#fff' })}
+      </div>
+      <div style={{fontSize: '16px', fontWeight: 600, color: '#e2e8f0'}}>{action.label}</div>
+    </div>
+  ))}
+</div>
 
         {showDeliveries && (
           <div style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '20px', padding: '32px', marginBottom: '32px', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.05)'}}>

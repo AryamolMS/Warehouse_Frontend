@@ -32,11 +32,11 @@ export default function Login() {
         email: adminEmail, 
         username: 'admin', 
         role: 'admin', 
-        phone: '0000000000' // hardcoded admin phone
+        phone: '0000000000'
       };
       localStorage.setItem('userDetails', JSON.stringify(adminDetails));
       localStorage.setItem('authToken', 'mock-admin-token-12345');
-      localStorage.setItem('phone', adminDetails.phone); // store phone separately
+      localStorage.setItem('phone', adminDetails.phone);
       setToast('Admin login successful!');
       setTimeout(() => {
         setToast('Redirecting to admin home...');
@@ -58,9 +58,23 @@ export default function Login() {
       setError(data.error || 'Login failed');
     } else {
       const userDetails = { ...data.supplier, role: 'supplier' };
+      
+      // ✅ SAVE TO LOCALSTORAGE - THIS IS THE FIX
       localStorage.setItem('userDetails', JSON.stringify(userDetails));
       localStorage.setItem('authToken', data.token);
-      localStorage.setItem('phone', data.supplier.phone || ''); // store phone
+      localStorage.setItem('phone', data.supplier.phone || '');
+      
+      // ✅ ADD THESE LINES FOR THE INVOICE PAGE
+      localStorage.setItem('supplierCompanyName', data.supplier.companyName || data.supplier.company_name || '');
+      localStorage.setItem('supplierId', data.supplier.id || data.supplier._id || '');
+      localStorage.setItem('supplierEmail', data.supplier.email || '');
+      
+      console.log('✅ Supplier data saved to localStorage:', {
+        companyName: data.supplier.companyName,
+        id: data.supplier.id,
+        email: data.supplier.email
+      });
+      
       setToast('Login successful!');
       setTimeout(() => {
         setToast('Redirecting to supplier home...');
@@ -68,11 +82,13 @@ export default function Login() {
       }, 1000);
     }
   } catch (err) {
+    console.error('Login error:', err);
     setError('Network error. Please try again.');
   } finally {
     setIsLoading(false);
   }
 };
+
 
 
   return (

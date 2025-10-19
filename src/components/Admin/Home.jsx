@@ -1,5 +1,5 @@
 // AdminDashboard.jsx - Main Layout with Sidebar
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, X, CheckCircle, AlertCircle, Sparkles, Truck, Package, ClipboardList, Users, BarChart3, LogOut, RefreshCw } from 'lucide-react';
 
@@ -29,54 +29,95 @@ function Home() {
   const handleLogout = () => {
     localStorage.removeItem("userDetails");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("supplierCompanyName");
+    localStorage.removeItem("supplierId");
     showToast("Logged out successfully!", 'success');
     setTimeout(() => {
       navigate('/login');
     }, 1000);
   };
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = useCallback(async () => {
     setLoading(true);
+    console.log('Fetching dashboard stats...');
+    
     try {
-      // Fetch pending pickups
-      const pickupsResponse = await fetch('http://127.0.0.1:8000/api/pending_pickups/');
-      if (pickupsResponse.ok) {
-        const pickupsData = await pickupsResponse.json();
-        setStats(prev => ({ ...prev, pendingPickups: pickupsData.count || 0 }));
+      // Method 1: Try to fetch from your existing endpoints
+      const [pickupsRes, suppliersRes, stockRes] = await Promise.allSettled([
+        fetch('http://127.0.0.1:8000/api/pending_pickups/'),
+        fetch('http://127.0.0.1:8000/api/total_suppliers/'),
+        fetch('http://127.0.0.1:8000/api/total_items/')
+      ]);
+
+      // Process Pending Pickups
+      if (pickupsRes.status === 'fulfilled' && pickupsRes.value.ok) {
+        const pickupsData = await pickupsRes.value.json();
+        console.log('Pending Pickups Response:', pickupsData);
+        setStats(prev => ({ ...prev, pendingPickups: pickupsData.count || pickupsData.total || 0 }));
+      } else if (pickupsRes.status === 'rejected' || !pickupsRes.value.ok) {
+        // Fallback: Fetch all pickups and filter by pending status
+        console.log('Trying fallback for pending pickups...');
+        const fallbackRes = await fetch('http://127.0.0.1:8000/api/pickup/get_all_pickup_requests_admin/');
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          const allPickups = data.requests || data || [];
+          const pendingCount = allPickups.filter(p => p.status?.toLowerCase() === 'pending').length;
+          console.log('Pending pickups from fallback:', pendingCount);
+          setStats(prev => ({ ...prev, pendingPickups: pendingCount }));
+        }
       }
 
-      // Fetch total suppliers
-      const suppliersResponse = await fetch('http://127.0.0.1:8000/api/total_suppliers/');
-      if (suppliersResponse.ok) {
-        const suppliersData = await suppliersResponse.json();
-        setStats(prev => ({ ...prev, totalSuppliers: suppliersData.total || 0 }));
+      // Process Total Suppliers
+      if (suppliersRes.status === 'fulfilled' && suppliersRes.value.ok) {
+        const suppliersData = await suppliersRes.value.json();
+        console.log('Total Suppliers Response:', suppliersData);
+        setStats(prev => ({ ...prev, totalSuppliers: suppliersData.total || suppliersData.count || 0 }));
+      } else {
+        // Fallback: You might need to create this endpoint or count from existing data
+        console.log('Suppliers endpoint failed, setting to 0');
+        setStats(prev => ({ ...prev, totalSuppliers: 0 }));
       }
 
-      // Fetch total stock
-      const stockResponse = await fetch('http://127.0.0.1:8000/api/total_items/');
-      if (stockResponse.ok) {
-        const stockData = await stockResponse.json();
-        setStats(prev => ({ ...prev, totalStock: stockData.total || 0 }));
+      // Process Total Stock
+      if (stockRes.status === 'fulfilled' && stockRes.value.ok) {
+        const stockData = await stockRes.value.json();
+        console.log('Total Stock Response:', stockData);
+        setStats(prev => ({ ...prev, totalStock: stockData.total || stockData.count || 0 }));
+      } else {
+        // Fallback: Fetch from inventory endpoint
+        console.log('Trying fallback for total stock...');
+        const fallbackRes = await fetch('http://127.0.0.1:8000/api/warehouse_inventory/');
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          const inventory = data.inventory || data || [];
+          const totalStock = inventory.reduce((sum, item) => sum + (item.quantity || 0), 0);
+          console.log('Total stock from fallback:', totalStock);
+          setStats(prev => ({ ...prev, totalStock: totalStock }));
+        }
       }
+
+      console.log('Final stats:', stats);
     } catch (err) {
+      console.error('Error fetching dashboard data:', err);
       showToast("Error fetching dashboard data: " + err.message, 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchDashboardStats();
     const interval = setInterval(fetchDashboardStats, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchDashboardStats]);
 
   const menuItems = [
     { icon: Truck, label: "Pending Pickups", path: "/adminpickup" },
+    { icon: BarChart3, label: "Invoice details", path: "/AcceptedPickupOrders" },
     { icon: Package, label: "Add Stock to Warehouse", path: "/admin_stock_management" },
     { icon: ClipboardList, label: "View Stock by Supplier", path: "/warehouseinventory" },
-    { icon: Users, label: "Manage Suppliers", path: "/admin/suppliers" },
-    { icon: BarChart3, label: "Reports & Analytics", path: "/admin/reports" }
+    { icon: Users, label: "Manage Suppliers", path: "/ManageSuppliers" },
   ];
 
   return (
@@ -179,23 +220,16 @@ function Home() {
                   value: stats.pendingPickups, 
                   color: '#f59e0b',
                   bgGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  onClick: () => navigate('/admin/pending-deliveries')
+                  onClick: () => navigate('/adminpickup')
                 },
-                { 
-                  icon: Users, 
-                  label: "Total Suppliers", 
-                  value: stats.totalSuppliers, 
-                  color: '#8b5cf6',
-                  bgGradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                  onClick: () => navigate('/admin/suppliers')
-                },
+          
                 { 
                   icon: Package, 
                   label: "Total Stock in Warehouse", 
                   value: stats.totalStock, 
                   color: '#10b981',
                   bgGradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  onClick: () => navigate('/admin/stock-by-supplier')
+                  onClick: () => navigate('/warehouseinventory')
                 }
               ].map((stat, idx) => (
                 <div 
