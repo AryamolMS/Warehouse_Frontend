@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Package, RefreshCw, Search, Download, Filter, Box, Calendar, Thermometer, User, Database } from 'lucide-react';
+import { ArrowLeft, Package, RefreshCw, Search, Download, Filter, Box, Calendar, Thermometer, User, Database, CheckCircle, AlertCircle, X } from 'lucide-react';
 
 function WarehouseInventory() {
   const [inventory, setInventory] = useState([]);
@@ -7,8 +7,22 @@ function WarehouseInventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStorage, setFilterStorage] = useState('all');
+  const [toasts, setToasts] = useState([]);  // Add toast notifications
 
-  const fetchInventory = async () => {
+  // Toast notification system
+  const showToast = (message, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, 3000);
+  };
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
+  const fetchInventory = async (showSuccessToast = false) => {
     setLoading(true);
     try {
       const response = await fetch('http://127.0.0.1:8000/api/warehouse_inventory/');
@@ -16,11 +30,17 @@ function WarehouseInventory() {
         const data = await response.json();
         const inventoryData = data.inventory || data || [];
         setInventory(inventoryData);
+        
+        if (showSuccessToast) {
+          showToast('Inventory refreshed successfully', 'success');
+        }
       } else {
         console.error('Failed to fetch inventory');
+        showToast('Failed to refresh inventory', 'error');
       }
     } catch (err) {
       console.error('Error:', err);
+      showToast('Error loading inventory', 'error');
     } finally {
       setLoading(false);
     }
@@ -28,8 +48,24 @@ function WarehouseInventory() {
 
   useEffect(() => {
     fetchInventory();
-    const interval = setInterval(fetchInventory, 60000);
+    // Auto-refresh every 30 seconds to catch pickup-related updates
+    const interval = setInterval(() => fetchInventory(), 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Listen for custom events from other components (optional)
+  useEffect(() => {
+    const handleStockUpdate = (event) => {
+      console.log('Stock updated:', event.detail);
+      fetchInventory();
+      showToast(
+        `Stock updated: ${event.detail.item} reduced by ${event.detail.quantity} units`,
+        'info'
+      );
+    };
+
+    window.addEventListener('warehouseStockUpdated', handleStockUpdate);
+    return () => window.removeEventListener('warehouseStockUpdated', handleStockUpdate);
   }, []);
 
   const formatDate = (dateString) => {
@@ -42,6 +78,8 @@ function WarehouseInventory() {
     }
   };
 
+  // Get low stock items (quantity < 10)
+  const lowStockItems = inventory.filter(item => item.quantity < 10);
   const categories = [...new Set(inventory.map(item => item.category).filter(Boolean))];
   const storageTypes = [...new Set(inventory.map(item => item.storageType).filter(Boolean))];
 
@@ -85,7 +123,11 @@ function WarehouseInventory() {
     a.download = `warehouse_inventory_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
+    showToast('Inventory exported successfully', 'success');
   };
+
+  // Helper function to determine if stock is low
+  const isLowStock = (quantity) => quantity < 10;
 
   return (
     <div style={{
@@ -95,6 +137,7 @@ function WarehouseInventory() {
       position: 'relative',
       overflow: 'hidden'
     }}>
+      {/* Background animations */}
       <div style={{
         position: 'absolute',
         width: '500px',
@@ -118,6 +161,44 @@ function WarehouseInventory() {
         pointerEvents: 'none'
       }}></div>
 
+      {/* Toast Notifications */}
+      <div style={{position: 'fixed', top: '20px', right: '20px', zIndex: 10000, display: 'flex', flexDirection: 'column', gap: '12px'}}>
+        {toasts.map(toast => (
+          <div key={toast.id} style={{
+            background: toast.type === 'success' ? 'rgba(16, 185, 129, 0.95)' : 
+                       toast.type === 'error' ? 'rgba(239, 68, 68, 0.95)' : 
+                       'rgba(59, 130, 246, 0.95)',
+            backdropFilter: 'blur(10px)',
+            color: '#fff',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            minWidth: '300px',
+            maxWidth: '400px',
+            animation: 'slideIn 0.3s ease-out'
+          }}>
+            {toast.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+            <span style={{flex: 1, fontSize: '14px', fontWeight: 500}}>{toast.message}</span>
+            <button onClick={() => removeToast(toast.id)} style={{
+              background: 'none',
+              border: 'none',
+              color: '#fff',
+              cursor: 'pointer',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <X size={18} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Header */}
       <div style={{
         background: 'rgba(15, 23, 42, 0.8)',
         backdropFilter: 'blur(20px)',
@@ -167,8 +248,25 @@ function WarehouseInventory() {
                 <Database size={28} color="#fff" />
               </div>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: '#fff' }}>Warehouse Inventory</div>
-                <div style={{ fontSize: '14px', color: '#94a3b8', marginTop: '4px' }}>All accepted stock in warehouse</div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#fff' }}>
+                  Warehouse Inventory
+                  {lowStockItems.length > 0 && (
+                    <span style={{
+                      marginLeft: '12px',
+                      padding: '4px 12px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      color: '#ef4444',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 600
+                    }}>
+                      {lowStockItems.length} Low Stock
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '14px', color: '#94a3b8', marginTop: '4px' }}>
+                  All accepted stock in warehouse • Auto-updates every 30s
+                </div>
               </div>
             </div>
           </div>
@@ -205,7 +303,7 @@ function WarehouseInventory() {
               Export CSV
             </button>
             <button 
-              onClick={fetchInventory}
+              onClick={() => fetchInventory(true)}
               disabled={loading}
               style={{
                 background: 'rgba(59, 130, 246, 0.2)',
@@ -236,8 +334,10 @@ function WarehouseInventory() {
         </div>
       </div>
 
+      {/* Main Content */}
       <div style={{ padding: '40px 48px', maxWidth: '1800px', margin: '0 auto', position: 'relative', zIndex: 10 }}>
         
+        {/* Stats Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '32px' }}>
           <div style={{
             background: 'rgba(15, 23, 42, 0.8)',
@@ -318,6 +418,7 @@ function WarehouseInventory() {
           </div>
         </div>
 
+        {/* Filters */}
         <div style={{
           background: 'rgba(15, 23, 42, 0.8)',
           backdropFilter: 'blur(20px)',
@@ -406,6 +507,7 @@ function WarehouseInventory() {
           </div>
         </div>
 
+        {/* Inventory Table */}
         <div style={{
           background: 'rgba(15, 23, 42, 0.8)',
           backdropFilter: 'blur(20px)',
@@ -550,14 +652,16 @@ function WarehouseInventory() {
                     <tr 
                       key={item.id || index} 
                       style={{
-                        background: index % 2 === 0 ? 'rgba(30, 41, 59, 0.3)' : 'rgba(30, 41, 59, 0.15)',
+                        background: isLowStock(item.quantity) ? 'rgba(239, 68, 68, 0.05)' : 
+                                   index % 2 === 0 ? 'rgba(30, 41, 59, 0.3)' : 'rgba(30, 41, 59, 0.15)',
                         transition: 'all 0.3s'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = index % 2 === 0 ? 'rgba(30, 41, 59, 0.3)' : 'rgba(30, 41, 59, 0.15)';
+                        e.currentTarget.style.background = isLowStock(item.quantity) ? 'rgba(239, 68, 68, 0.05)' :
+                                                           index % 2 === 0 ? 'rgba(30, 41, 59, 0.3)' : 'rgba(30, 41, 59, 0.15)';
                       }}
                     >
                       <td style={{ padding: '16px', borderBottom: '1px solid rgba(71, 85, 105, 0.2)' }}>
@@ -582,7 +686,28 @@ function WarehouseInventory() {
                         </div>
                       </td>
                       <td style={{ padding: '16px', borderBottom: '1px solid rgba(71, 85, 105, 0.2)' }}>
-                        <div style={{ fontSize: '15px', fontWeight: 600, color: '#10b981' }}>{item.quantity} {item.unit}</div>
+                        <div style={{ 
+                          fontSize: '15px', 
+                          fontWeight: 600, 
+                          color: isLowStock(item.quantity) ? '#ef4444' : '#10b981',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          {item.quantity} {item.unit}
+                          {isLowStock(item.quantity) && (
+                            <span style={{
+                              padding: '2px 8px',
+                              background: 'rgba(239, 68, 68, 0.2)',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              color: '#ef4444',
+                              fontWeight: 700
+                            }}>
+                              LOW
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: '16px', borderBottom: '1px solid rgba(71, 85, 105, 0.2)' }}>
                         <span style={{
@@ -647,6 +772,10 @@ function WarehouseInventory() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
       `}</style>
     </div>

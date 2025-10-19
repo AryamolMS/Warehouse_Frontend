@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Package, Calendar, CheckCircle, AlertCircle, X, RefreshCw, User, Clock, FileText, Check, XCircle, Search, Filter } from 'lucide-react';
 
-
 function AdminPickupRequests() {
   const [toasts, setToasts] = useState([]);
   const [pickupRequests, setPickupRequests] = useState([]);
@@ -12,7 +11,7 @@ function AdminPickupRequests() {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
-
+  const [stockStatusMap, setStockStatusMap] = useState({});
 
   const showToast = (message, type = 'success') => {
     const id = Date.now();
@@ -22,86 +21,195 @@ function AdminPickupRequests() {
     }, 3000);
   };
 
-
   const removeToast = (id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-
-  const fetchPickupRequests = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/pickup/get_all_pickup_requests_admin/');
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Fetched data:', data); // Debug log
-        
-        // Handle both response formats
-        const requests = data.requests || data || [];
-        setPickupRequests(requests);
-      } else {
-        const errorData = await response.json();
-        showToast(errorData.error || 'Failed to fetch pickup requests', 'error');
-      }
-    } catch (err) {
-      console.error('Fetch error:', err);
-      showToast('Error: ' + err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  useEffect(() => {
-    fetchPickupRequests();
-    const interval = setInterval(fetchPickupRequests, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
-
-
-  const handleApprove = (request) => {
-    setSelectedRequest(request);
-    setShowApproveModal(true);
-  };
-
-
-  const confirmApproval = async () => {
-    if (!selectedRequest) return;
-    
+  const checkWarehouseStock = async (item, quantity) => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/pickup/approve/${selectedRequest.id}/`,
+        `http://127.0.0.1:8000/api/check-warehouse-stock/`,
         {
-          method: 'PATCH',
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            item: item,
+            requestedQuantity: quantity
+          })
         }
       );
       
       const data = await response.json();
-      
-      if (response.ok && data.success) {
-        // Update local state with the approved request
-        setPickupRequests(prev => 
-          prev.map(r => r.id === selectedRequest.id ? { ...r, status: 'approved' } : r)
-        );
-        showToast(data.message || 'Pickup request approved successfully!', 'success');
-        
-        // Refresh the list from server to ensure sync
-        await fetchPickupRequests();
-      } else {
-        showToast(data.message || data.error || 'Failed to approve pickup request', 'error');
-      }
+      return {
+        available: data.available,
+        currentStock: data.currentStock,
+        requestedQuantity: quantity,
+        canFulfill: data.currentStock >= quantity
+      };
     } catch (err) {
-      console.error('Approval error:', err);
-      showToast('Error: ' + err.message, 'error');
-    } finally {
-      setShowApproveModal(false);
-      setSelectedRequest(null);
+      console.error('Stock check error:', err);
+      return { available: false, canFulfill: false };
     }
   };
+
+ const fetchPickupRequests = async () => {
+  setLoading(true);
+  console.log('[AdminPickupRequests] Fetching pickup requests...');
+  
+  try {
+    const response = await fetch('http://127.0.0.1:8000/api/pickup/get_all_pickup_requests_admin/');
+    
+    console.log('[AdminPickupRequests] Response status:', response.status);
+    console.log('[AdminPickupRequests] Response OK:', response.ok);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[AdminPickupRequests] Received data:', data);
+      
+      const requests = data.requests || data || [];
+      console.log('[AdminPickupRequests] Processed requests:', requests);
+      console.log('[AdminPickupRequests] Number of requests:', requests.length);
+      
+      setPickupRequests(requests);
+    } else {
+      const errorData = await response.json();
+      console.error('[AdminPickupRequests] Error response:', errorData);
+      showToast(errorData.error || 'Failed to fetch pickup requests', 'error');
+    }
+  } catch (err) {
+    console.error('[AdminPickupRequests] Fetch error:', err);
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    setLoading(false);
+    console.log('[AdminPickupRequests] Loading complete. Requests count:', pickupRequests.length);
+  }
+};
+
+
+  // Check stock status for all pending requests
+  useEffect(() => {
+    const checkAllStocks = async () => {
+      const newStockMap = {};
+      
+      for (const request of pickupRequests) {
+        if (request.status?.toLowerCase() === 'pending') {
+          const stockStatus = await checkWarehouseStock(request.item, request.quantity);
+          newStockMap[request.id] = stockStatus;
+        }
+      }
+      
+      setStockStatusMap(newStockMap);
+    };
+    
+    if (pickupRequests.length > 0) {
+      checkAllStocks();
+    }
+  }, [pickupRequests]);
+
+  useEffect(() => {
+    fetchPickupRequests();
+    const interval = setInterval(fetchPickupRequests, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleApprove = async (request) => {
+    setLoading(true);
+    
+    const stockCheck = stockStatusMap[request.id] || await checkWarehouseStock(request.item, request.quantity);
+    
+    if (!stockCheck.canFulfill) {
+      showToast(
+        `Insufficient stock! Available: ${stockCheck.currentStock} units, Requested: ${request.quantity} units`,
+        'error'
+      );
+      setLoading(false);
+      return;
+    }
+    
+    setSelectedRequest({
+      ...request,
+      stockInfo: stockCheck
+    });
+    setShowApproveModal(true);
+    setLoading(false);
+  };
+
+ // AdminPickupRequests.jsx - Update confirmApproval function
+
+const confirmApproval = async () => {
+  if (!selectedRequest) return;
+  
+  try {
+    // Step 1: Approve the pickup request
+    const response = await fetch(
+      `http://127.0.0.1:8000/api/pickup/approve/${selectedRequest.id}/`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      // Step 2: Generate invoice for storage
+      try {
+        const invoiceResponse = await fetch(
+          `http://127.0.0.1:8000/api/generate-storage-invoice/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              pickupRequestId: selectedRequest.id
+            })
+          }
+        );
+        
+        const invoiceData = await invoiceResponse.json();
+        
+        if (invoiceResponse.ok && invoiceData.success) {
+          showToast(
+            `Pickup approved! Invoice ${invoiceData.invoice.invoiceNumber} generated successfully`,
+            'success'
+          );
+        } else {
+          showToast(
+            `Pickup approved but invoice generation failed: ${invoiceData.error}`,
+            'warning'
+          );
+        }
+      } catch (invoiceErr) {
+        console.error('Invoice generation error:', invoiceErr);
+        showToast(
+          `Pickup approved but invoice generation failed`,
+          'warning'
+        );
+      }
+      
+      // Update local state
+      setPickupRequests(prev => 
+        prev.map(r => r.id === selectedRequest.id ? { ...r, status: 'approved' } : r)
+      );
+      
+      // Refresh the list
+      await fetchPickupRequests();
+    } else {
+      showToast(data.message || data.error || 'Failed to approve pickup request', 'error');
+    }
+  } catch (err) {
+    console.error('Approval error:', err);
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    setShowApproveModal(false);
+    setSelectedRequest(null);
+  }
+};
 
 
   const handleReject = (request) => {
@@ -109,7 +217,6 @@ function AdminPickupRequests() {
     setRejectionReason('');
     setShowRejectModal(true);
   };
-
 
   const confirmRejection = async () => {
     if (!selectedRequest) return;
@@ -131,13 +238,10 @@ function AdminPickupRequests() {
       const data = await response.json();
       
       if (response.ok && data.success) {
-        // Update local state with the rejected request
         setPickupRequests(prev => 
           prev.map(r => r.id === selectedRequest.id ? { ...r, status: 'rejected', rejectionReason: rejectionReason } : r)
         );
         showToast(data.message || 'Pickup request rejected', 'success');
-        
-        // Refresh the list from server to ensure sync
         await fetchPickupRequests();
       } else {
         showToast(data.message || data.error || 'Failed to reject pickup request', 'error');
@@ -151,7 +255,6 @@ function AdminPickupRequests() {
       setRejectionReason('');
     }
   };
-
 
   const getStatusColor = (status) => {
     const statusLower = (status || 'pending').toLowerCase();
@@ -171,12 +274,10 @@ function AdminPickupRequests() {
     }
   };
 
-
   const formatStatus = (status) => {
     if (!status) return 'Pending';
     return status.charAt(0).toUpperCase() + status.slice(1);
   };
-
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -187,7 +288,6 @@ function AdminPickupRequests() {
       return dateString;
     }
   };
-
 
   const filteredRequests = pickupRequests.filter(request => {
     const matchesSearch = 
@@ -200,16 +300,13 @@ function AdminPickupRequests() {
     return matchesSearch && matchesFilter;
   });
 
-
   const pendingCount = pickupRequests.filter(r => r.status?.toLowerCase() === 'pending').length;
   const approvedCount = pickupRequests.filter(r => r.status?.toLowerCase() === 'approved').length;
-
 
   return (
     <div style={{minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)', padding: '0', margin: '0', position: 'relative', overflowX: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'}}>
       <div style={{position: 'absolute', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%)', top: '-250px', left: '-250px', animation: 'float 20s infinite ease-in-out', pointerEvents: 'none'}}></div>
       <div style={{position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(147, 51, 234, 0.25) 0%, transparent 70%)', bottom: '-200px', right: '-200px', animation: 'float 25s infinite ease-in-out reverse', pointerEvents: 'none'}}></div>
-
 
       {/* Toast Notifications */}
       <div style={{position: 'fixed', top: '20px', right: '20px', zIndex: 10000, display: 'flex', flexDirection: 'column', gap: '12px'}}>
@@ -223,7 +320,6 @@ function AdminPickupRequests() {
           </div>
         ))}
       </div>
-
 
       {/* Header */}
       <div style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', boxShadow: '0 4px 24px rgba(0,0,0,0.3)', padding: '24px 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', position: 'relative', zIndex: 10}}>
@@ -251,7 +347,6 @@ function AdminPickupRequests() {
         </button>
       </div>
 
-
       {/* Main Content */}
       <div style={{padding: '40px 48px', maxWidth: '1600px', margin: '0 auto', width: '100%', position: 'relative', zIndex: 10}}>
         {/* Stats Cards */}
@@ -266,7 +361,6 @@ function AdminPickupRequests() {
             <div style={{fontSize: '36px', fontWeight: 700, color: '#f59e0b'}}>{pendingCount}</div>
           </div>
 
-
           <div style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '20px', padding: '28px', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)'}}>
             <div style={{display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px'}}>
               <div style={{width: '56px', height: '56px', borderRadius: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)'}}>
@@ -276,7 +370,6 @@ function AdminPickupRequests() {
             <div style={{fontSize: '14px', color: '#94a3b8', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px'}}>Approved Requests</div>
             <div style={{fontSize: '36px', fontWeight: 700, color: '#10b981'}}>{approvedCount}</div>
           </div>
-
 
           <div style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '20px', padding: '28px', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)'}}>
             <div style={{display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px'}}>
@@ -288,7 +381,6 @@ function AdminPickupRequests() {
             <div style={{fontSize: '36px', fontWeight: 700, color: '#60a5fa'}}>{pickupRequests.length}</div>
           </div>
         </div>
-
 
         {/* Filters */}
         <div style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '20px', padding: '24px', marginBottom: '24px', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)'}}>
@@ -303,7 +395,6 @@ function AdminPickupRequests() {
                 style={{width: '100%', padding: '14px 14px 14px 48px', background: 'rgba(30, 41, 59, 0.6)', border: '2px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff', fontSize: '14px', outline: 'none', transition: 'all 0.3s'}}
               />
             </div>
-
 
             <div style={{position: 'relative'}}>
               <Filter size={20} style={{position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b'}} />
@@ -321,14 +412,12 @@ function AdminPickupRequests() {
           </div>
         </div>
 
-
         {/* Requests List */}
         <div style={{background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '32px', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)'}}>
           <h3 style={{color: '#fff', fontSize: '20px', fontWeight: 700, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px'}}>
             <Package size={24} color="#60a5fa" />
             Pickup Requests ({filteredRequests.length})
           </h3>
-
 
           {loading && pickupRequests.length === 0 ? (
             <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 40px', gap: '16px'}}>
@@ -347,114 +436,63 @@ function AdminPickupRequests() {
             </div>
           ) : (
             <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-              {filteredRequests.map((request, index) => {
-                const statusColors = getStatusColor(request.status);
+              {filteredRequests.map((request) => {
+                const statusColor = getStatusColor(request.status);
                 const isPending = request.status?.toLowerCase() === 'pending';
+                const stockStatus = stockStatusMap[request.id];
                 
                 return (
-                  <div key={request.id || index} style={{background: 'rgba(30, 41, 59, 0.6)', borderRadius: '16px', padding: '28px', border: '1px solid rgba(71, 85, 105, 0.3)', transition: 'all 0.3s'}}>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px'}}>
-                      <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                        <div style={{width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                          <User size={24} color="#fff" />
-                        </div>
-                        <div>
-                          <div style={{fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '4px'}}>{request.companyName || 'Unknown Supplier'}</div>
-                          <div style={{fontSize: '13px', color: '#94a3b8'}}>Request ID: #{request.id}</div>
-                        </div>
-                      </div>
-                      <span style={{
-                        padding: '10px 20px',
-                        borderRadius: '12px',
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        background: statusColors.bg,
-                        color: statusColors.color,
-                        border: `2px solid ${statusColors.border}40`,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}>
-                        {formatStatus(request.status)}
-                      </span>
-                    </div>
-
-
-                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px', marginBottom: '24px'}}>
-                      <div>
-                        <div style={{fontSize: '12px', color: '#64748b', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px'}}>Item</div>
-                        <div style={{fontSize: '15px', color: '#e2e8f0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                          <Package size={16} color="#60a5fa" />
-                          {request.item || 'N/A'}
-                        </div>
-                      </div>
-
-
-                      <div>
-                        <div style={{fontSize: '12px', color: '#64748b', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px'}}>Quantity</div>
-                        <div style={{fontSize: '15px', color: '#e2e8f0', fontWeight: 600}}>
-                          {request.quantity || 0} units
-                        </div>
-                      </div>
-
-
-                      <div>
-                        <div style={{fontSize: '12px', color: '#64748b', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px'}}>Pickup Date</div>
-                        <div style={{fontSize: '15px', color: '#e2e8f0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                          <Calendar size={16} color="#60a5fa" />
-                          {formatDate(request.pickupDate)}
-                        </div>
-                      </div>
-
-
-                      <div>
-                        <div style={{fontSize: '12px', color: '#64748b', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px'}}>Pickup Time</div>
-                        <div style={{fontSize: '15px', color: '#e2e8f0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px'}}>
-                          <Clock size={16} color="#60a5fa" />
-                          {request.pickupTime || 'Not specified'}
-                        </div>
-                      </div>
-                    </div>
-
-
-                    {request.specialInstructions && request.specialInstructions !== 'null' && request.specialInstructions !== '' && (
-                      <div style={{marginBottom: '24px', padding: '16px', background: 'rgba(51, 65, 85, 0.4)', borderRadius: '12px', border: '1px solid rgba(71, 85, 105, 0.3)'}}>
-                        <div style={{fontSize: '12px', color: '#64748b', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px'}}>
-                          <FileText size={14} />
-                          Special Instructions
-                        </div>
-                        <div style={{fontSize: '14px', color: '#cbd5e1', lineHeight: '1.6'}}>
-                          {request.specialInstructions}
+                  <div key={request.id} style={{background: 'rgba(30, 41, 59, 0.6)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(71, 85, 105, 0.3)', transition: 'all 0.3s'}}>
+                    {isPending && stockStatus && (
+                      <div style={{padding: '12px', borderRadius: '12px', marginBottom: '16px', background: stockStatus.canFulfill ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: stockStatus.canFulfill ? '2px solid rgba(16, 185, 129, 0.3)' : '2px solid rgba(239, 68, 68, 0.3)'}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '8px', color: stockStatus.canFulfill ? '#10b981' : '#ef4444', fontWeight: 600}}>
+                          {stockStatus.canFulfill ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                          Warehouse Stock: {stockStatus.currentStock} units
+                          {!stockStatus.canFulfill && ' (Insufficient)'}
                         </div>
                       </div>
                     )}
 
-                    {request.rejectionReason && request.rejectionReason !== '' && (
-                      <div style={{marginBottom: '24px', padding: '16px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.3)'}}>
-                        <div style={{fontSize: '12px', color: '#ef4444', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px'}}>
-                          <XCircle size={14} />
-                          Rejection Reason
-                        </div>
-                        <div style={{fontSize: '14px', color: '#fca5a5', lineHeight: '1.6'}}>
-                          {request.rejectionReason}
+                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px'}}>
+                      <div>
+                        <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Supplier</div>
+                        <div style={{fontSize: '16px', color: '#fff', fontWeight: 600}}>{request.companyName}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Item</div>
+                        <div style={{fontSize: '16px', color: '#fff', fontWeight: 600}}>{request.item}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Quantity</div>
+                        <div style={{fontSize: '16px', color: '#fff', fontWeight: 600}}>{request.quantity} units</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Status</div>
+                        <div style={{display: 'inline-block', padding: '6px 12px', borderRadius: '8px', background: statusColor.bg, color: statusColor.color, fontWeight: 600, fontSize: '13px'}}>
+                          {formatStatus(request.status)}
                         </div>
                       </div>
-                    )}
-
+                      <div>
+                        <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Date</div>
+                        <div style={{fontSize: '16px', color: '#fff', fontWeight: 600}}>{formatDate(request.requestDate || request.createdAt)}</div>
+                      </div>
+                    </div>
 
                     {isPending && (
-                      <div style={{display: 'flex', gap: '12px', paddingTop: '20px', borderTop: '1px solid rgba(71, 85, 105, 0.3)'}}>
+                      <div style={{display: 'flex', gap: '12px', marginTop: '16px'}}>
                         <button 
                           onClick={() => handleApprove(request)}
-                          style={{flex: 1, padding: '14px 24px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.3)', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}
+                          disabled={stockStatus && !stockStatus.canFulfill}
+                          style={{flex: 1, padding: '12px 20px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', border: 'none', borderRadius: '12px', cursor: stockStatus && !stockStatus.canFulfill ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: stockStatus && !stockStatus.canFulfill ? 0.5 : 1, transition: 'all 0.3s', boxShadow: '0 4px 20px rgba(16, 185, 129, 0.3)'}}
                         >
-                          <Check size={20} />
-                          Approve Pickup
+                          <Check size={18} />
+                          Approve
                         </button>
                         <button 
                           onClick={() => handleReject(request)}
-                          style={{flex: 1, padding: '14px 24px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: '2px solid rgba(239, 68, 68, 0.4)', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '15px', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}
+                          style={{flex: 1, padding: '12px 20px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: '2px solid rgba(239, 68, 68, 0.4)', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.3s'}}
                         >
-                          <XCircle size={20} />
+                          <XCircle size={18} />
                           Reject
                         </button>
                       </div>
@@ -467,18 +505,34 @@ function AdminPickupRequests() {
         </div>
       </div>
 
-
       {/* Approve Modal */}
       {showApproveModal && selectedRequest && (
         <div style={{position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0, 0, 0, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)'}} onClick={() => setShowApproveModal(false)}>
           <div style={{background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '36px', minWidth: '500px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)', color: '#fff'}} onClick={(e) => e.stopPropagation()}>
             <div style={{display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px'}}>
               <div style={{width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)'}}>
-                <CheckCircle size={28} color="#fff" />
+                <Check size={28} color="#fff" />
               </div>
               <h2 style={{margin: 0, fontSize: '24px', fontWeight: 700}}>Approve Pickup Request</h2>
             </div>
-            
+
+            <div style={{background: 'rgba(16, 185, 129, 0.1)', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '2px solid rgba(16, 185, 129, 0.3)'}}>
+              <div style={{fontSize: '14px', color: '#10b981', marginBottom: '12px', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <CheckCircle size={18} />
+                Stock Verification Passed
+              </div>
+              <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
+                <div>
+                  <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px'}}>Current Stock</div>
+                  <div style={{fontSize: '18px', color: '#10b981', fontWeight: 700}}>{selectedRequest.stockInfo?.currentStock} units</div>
+                </div>
+                <div>
+                  <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px'}}>After Pickup</div>
+                  <div style={{fontSize: '18px', color: '#fff', fontWeight: 700}}>{selectedRequest.stockInfo?.currentStock - selectedRequest.quantity} units</div>
+                </div>
+              </div>
+            </div>
+
             <div style={{background: 'rgba(30, 41, 59, 0.4)', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid rgba(71, 85, 105, 0.3)'}}>
               <div style={{marginBottom: '16px'}}>
                 <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Supplier</div>
@@ -488,21 +542,15 @@ function AdminPickupRequests() {
                 <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Item</div>
                 <div style={{fontSize: '16px', color: '#fff', fontWeight: 600}}>{selectedRequest.item}</div>
               </div>
-              <div style={{marginBottom: '16px'}}>
+              <div>
                 <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase'}}>Quantity</div>
                 <div style={{fontSize: '16px', color: '#fff', fontWeight: 600}}>{selectedRequest.quantity} units</div>
               </div>
-              <div>
-                <div style={{fontSize: '12px', color: '#94a3b8', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase'}}>Pickup Date & Time</div>
-                <div style={{fontSize: '16px', color: '#fff', fontWeight: '600'}}>{formatDate(selectedRequest.pickupDate)} at {selectedRequest.pickupTime}</div>
-              </div>
             </div>
 
-
             <p style={{color: '#cbd5e1', marginBottom: '24px', fontSize: '14px', lineHeight: '1.6'}}>
-              Are you sure you want to approve this pickup request? This action will notify the supplier to prepare the items for pickup.
+              Are you sure you want to approve this pickup request? The warehouse stock will be updated accordingly.
             </p>
-
 
             <div style={{display: 'flex', gap: '12px'}}>
               <button 
@@ -565,7 +613,6 @@ function AdminPickupRequests() {
               Are you sure you want to reject this pickup request? The supplier will be notified of the rejection.
             </p>
 
-
             <div style={{display: 'flex', gap: '12px'}}>
               <button 
                 onClick={confirmRejection}
@@ -587,7 +634,6 @@ function AdminPickupRequests() {
           </div>
         </div>
       )}
-
 
       <style>{`
         @keyframes float {
@@ -618,6 +664,5 @@ function AdminPickupRequests() {
     </div>
   );
 }
-
 
 export default AdminPickupRequests;
